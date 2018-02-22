@@ -1,0 +1,307 @@
+---
+title: "Computational Modeling - Week 4 - Assignment 2 - Part 1"
+author: "Riccardo Fusaroli"
+date: "2/19/2017"
+output: html_document
+---
+
+```{r}
+library(ggplot2);library(rethinking);library(cowplot)
+
+```
+
+## In this assignment we learn how to assess rates from a binomial distribution, using the case of assessing your teachers' knowledge of CogSci
+
+### First part
+
+You want to assess your teachers' knowledge of cognitive science. "These guys are a bunch of drama(turgist) queens, mindless philosophers, chattering communication people and Russian spies. Do they really know CogSci?", you think.
+
+To keep things simple (your teachers should not be faced with too complicated things):
+- You created a pool of equally challenging questions on CogSci
+- Each question can be answered correctly or not (we don't allow partially correct answers, to make our life simpler).
+- Knowledge of CogSci can be measured on a scale from 0 (negative knowledge, all answers wrong) through 0.5 (random chance) to 1 (awesome CogSci superpowers)
+
+This is the data:
+- Riccardo: 3 correct answers out of 6 questions
+- Kristian: 2 correct answers out of 2 questions (then he gets bored)
+- Josh: 160 correct answers out of 198 questions (Josh never gets bored)
+- Mikkel: 66 correct answers out of 132 questions
+
+##Questions:
+
+###1. What's Riccardo's estimated knowledge of CogSci? What is the probability he knows more than chance (0.5) [try figuring this out. if you can't peek into chapters 3.1 and 3.2 and/or the slides]?
+- First implement a grid approximation (hint check paragraph 2.4.1!) with a uniform prior, calculate the posterior and plot the results
+- Then implement a quadratic approximation (hint check paragraph 2.4.2!).
+- N.B. for the rest of the exercise just keep using the grid approximation (we'll move to quadratic approximations in two classes)
+```{r}
+
+#define grid
+p_grid=seq(from=0, to =1, length.out=dens)
+#define prior
+prior =rep(1, dens) #flat
+#prior = ifelse(p_grid < 0.5,0,1)
+#prior= exp(-5*abs(p_grid-0.5))
+
+#computing likelihood
+likelihood=dbinom(3,size=6, prob=p_grid)
+
+#computing posteriror
+undstd.posterior=likelihood*prior 
+  
+posterior=undstd.posterior/sum(undstd.posterior)
+
+data=data.frame(grid=p_grid,posterior=posterior, prior=prior, likelihood=likelihood)
+Rplot=ggplot(data,aes(p_grid,posterior))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='red')
+
+#quadratic approximation
+ric.qa <- map( alist( 
+   w ~ dbinom(6,p) , # binomial likelihood 
+   p ~ dunif(0,1) # uniform prior 
+  ), 
+  data=list(w=3) ) 
+
+precis(ric.qa) #summary of quadratic approximation
+
+# analytical calculation
+r <- 3 ; n <- 6 #r=right answers n=total number
+curve( dbeta( x , r+1 , n-r+1 ) , from=0 , to=1 )
+curve( dnorm( x , 0.5 , 0.2 ) , lty=2 , add=TRUE )   #analytic = the straight curve, Quadratic approximation
+
+# what is the probability that Riccardo knows more than chance=
+samplesR <- sample( p_grid , prob=posterior , size=1e4 , replace=TRUE )
+dens(samplesR)
+sum( posterior[ p_grid < 0.5 ] ) #0.5
+#There's 50% chance that Riccardo's knowledge is above chance, as 50% of the posterior probability is below 0.5.
+
+```
+
+###2. Estimate all the teachers' knowledge of CogSci. Who's best? Use grid approximation. Comment on the posteriors of Riccardo and Mikkel.
+2a. Produce plots of the prior, and posterior for each teacher.
+```{r}
+##MIKKEL##
+#computing likelihood
+likelihoodM=dbinom(66,size=132, prob=p_grid)
+
+#computing posteriror
+undstd.posterior1=likelihoodM*prior 
+  
+posteriorM=undstd.posterior1/sum(undstd.posterior1)
+
+dataM=data.frame(grid=p_grid,posterior=posteriorM, prior=prior, likelihood=likelihoodM)
+Mplot=ggplot(dataM,aes(p_grid,posteriorM))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='red')
+
+##JOSH##
+likelihoodJ=dbinom(160,size=198, prob=p_grid)
+
+#computing posteriror
+undstd.posterior2=likelihoodJ*prior 
+  
+posteriorJ=undstd.posterior2/sum(undstd.posterior2)
+
+dataJ=data.frame(grid=p_grid,posterior=posteriorJ, prior=prior, likelihood=likelihoodJ)
+ggplot(dataJ,aes(grid,posteriorJ))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')
+
+##KRISTIAN##
+likelihoodK=dbinom(2,size=2, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorK=likelihoodK*prior 
+  
+posteriorK=undstd.posteriorK/sum(undstd.posteriorK)
+
+dataK=data.frame(grid=p_grid,posterior=posteriorK, prior=prior, likelihood=likelihoodK)
+ggplot(dataK,aes(grid,posteriorK))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')
+
+
+#Posteriors of Mikkel and Riccardo
+# The distributions are different, but both teachers are situated at chance level. The plot of Riccardo shows a broad distribution, indicating the probability is quite spread across the x axis, still having the highest point around the centre of the axis. While the narrowness of the spread in Mikkels distribution tells us about the high probability of Mikkel answering at chance level, and very low probability of him answering above or below chance. The difference in the plots are due to the difference in number of samples.
+plot_grid(Mplot,Rplot)
+
+```
+###3. Change the prior. Given your teachers have all CogSci jobs, you should start with a higher appreciation of their knowledge: the prior is a normal distribution with a mean of 0.8 and a standard deviation of 0.2. Do the results change (and if so how)?
+3a. Produce plots of the prior and posterior for each teacher.
+```{r}
+dens=100
+#optimistic prior for RICCARDO
+optprior = dnorm(p_grid,mean=0.8,sd=0.2)    #optimistic prior
+likelihoodRopt=dbinom(3,size=6, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorRopt=likelihoodRopt*optprior 
+  
+posteriorRopt=undstd.posteriorRopt/sum(undstd.posteriorRopt)
+
+dataRopt=data.frame(grid=p_grid,posterior=posteriorRopt, prior=optprior, likelihood=likelihoodRopt)
+ggplot(dataRopt,aes(p_grid,posteriorRopt))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='darkgreen')
+
+#optimistic prior for MIKKEL
+likelihoodMopt=dbinom(66,size=132, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorMopt=likelihoodMopt*optprior 
+  
+posteriorMopt=undstd.posteriorMopt/sum(undstd.posteriorMopt)
+
+dataMopt=data.frame(grid=p_grid,posterior=posteriorMopt, prior=optprior, likelihood=likelihoodMopt)
+ggplot(dataMopt,aes(p_grid,posteriorMopt))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='darkgreen')
+
+sd(dataMopt$posterior)
+sd(dataRopt$posterior)
+
+#optimistic prior for JOSH
+likelihoodJopt=dbinom(160,size=198, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorJopt=likelihoodJopt*optprior 
+  
+posteriorJopt=undstd.posteriorJopt/sum(undstd.posteriorJopt)
+
+dataJopt=data.frame(grid=p_grid,posterior=posteriorJopt, prior=optprior, likelihood=likelihoodJopt)
+ggplot(dataJopt,aes(p_grid,posteriorJopt))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='darkgreen')
+
+#optimistic prior for KRISTIAN
+likelihoodKopt=dbinom(2,size=2, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorKopt=likelihoodKopt*optprior 
+  
+posteriorKopt=undstd.posteriorKopt/sum(undstd.posteriorKopt)
+
+dataKopt=data.frame(grid=p_grid,posterior=posteriorKopt, prior=optprior, likelihood=likelihoodKopt)
+ggplot(dataKopt,aes(p_grid,posteriorKopt))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='darkgreen')
+```
+
+###4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why?
+
+#####FLAT PRIOR
+```{r}
+##RICCARDO##
+#computing likelihood
+likelihoodRPlus=dbinom(300,size=600, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorRPlus=likelihoodRPlus*prior 
+posteriorRPlus=undstd.posteriorRPlus/sum(undstd.posteriorRPlus)
+
+dataRPlus=data.frame(grid=p_grid,posterior=posteriorRPlus, prior=prior, likelihood=likelihoodRPlus)
+ggplot(dataRPlus,aes(p_grid,posteriorRPlus))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='red')
+
+
+##MIKKEL##
+#computing likelihood
+likelihoodMPlus=dbinom(6600,size=13200, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorMPlus=likelihoodMPlus*prior 
+  
+posteriorMPlus=undstd.posteriorMPlus/sum(undstd.posteriorMPlus)
+
+dataMPlus=data.frame(grid=p_grid,posterior=posteriorMPlus, prior=prior, likelihood=likelihoodMPlus)
+ggplot(dataMPlus,aes(p_grid,posteriorMPlus))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='red')
+
+##JOSH##
+likelihoodJPlus=dbinom(16000,size=19800, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorJPlus=likelihoodJPlus*prior 
+  
+posteriorJPlus=undstd.posteriorJPlus/sum(undstd.posteriorJPlus)
+
+dataJPlus=data.frame(grid=p_grid,posterior=posteriorJPlus, prior=prior, likelihood=likelihoodJPlus)
+ggplot(dataJPplus,aes(grid,posteriorJPlus))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')
+
+##KRISTIAN##
+likelihoodKPlus=dbinom(200,size=200, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorKPlus=likelihoodKPlus*prior 
+  
+posteriorKPlus=undstd.posteriorKPlus/sum(undstd.posteriorKPlus)
+
+dataKPlus=data.frame(grid=p_grid,posterior=posteriorKPlus, prior=prior, likelihood=likelihoodKPlus)
+ggplot(dataK,aes(grid,posteriorKPlus))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(grid,prior/dens),color='red')
+
+
+```
+
+#####OPTIMISTIC PRIOR
+```{r}
+#optimistic prior for RICCARDO
+optprior = dnorm(p_grid,mean=0.8,sd=0.2)    #optimistic prior
+likelihoodRopt=dbinom(300,size=600, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorRopt=likelihoodRopt*optprior 
+  
+posteriorRopt=undstd.posteriorRopt/sum(undstd.posteriorRopt)
+
+dataRopt=data.frame(grid=p_grid,posterior=posteriorRopt, prior=optprior, likelihood=likelihoodRopt)
+ggplot(dataRopt,aes(p_grid,posteriorRopt))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='darkgreen')
+
+#optimistic prior for MIKKEL
+likelihoodMopt=dbinom(6600,size=13200, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorMopt=likelihoodMopt*optprior 
+  
+posteriorMopt=undstd.posteriorMopt/sum(undstd.posteriorMopt)
+
+dataMopt=data.frame(grid=p_grid,posterior=posteriorMopt, prior=optprior, likelihood=likelihoodMopt)
+ggplot(dataMopt,aes(p_grid,posteriorMopt))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='darkgreen')
+
+sd(dataMopt$posterior)
+sd(dataRopt$posterior)
+
+#optimistic prior for JOSH
+likelihoodJoptPlus=dbinom(16000,size=19800, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorJoptPlus=likelihoodJoptPlus*optprior 
+  
+posteriorJoptPlus=undstd.posteriorJoptPlus/sum(undstd.posteriorJoptPlus)
+
+dataJoptPlus=data.frame(grid=p_grid,posterior=posteriorJoptPlus, prior=optprior, likelihood=likelihoodJoptPlus)
+ggplot(dataJopt,aes(p_grid,posteriorJoptPlus))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='darkgreen')
+
+#optimistic prior for KRISTIAN
+likelihoodKopt=dbinom(200,size=200, prob=p_grid)
+
+#computing posteriror
+undstd.posteriorKopt=likelihoodKopt*optprior 
+  
+posteriorKopt=undstd.posteriorKopt/sum(undstd.posteriorKopt)
+
+dataKopt=data.frame(grid=p_grid,posterior=posteriorKopt, prior=optprior, likelihood=likelihoodKopt)
+ggplot(dataKopt,aes(p_grid,posteriorKopt))+  geom_point()+geom_line()+theme_classic()+  geom_line(aes(p_grid,prior/dens),color='darkgreen')
+```
+Prose answer: The more data, the narrower the distribution spread. The adding of data results in the prior having very little influence on the distribution.
+
+
+###5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief?
+
+We would use a skeptic prior (fx mean=0.5, sd = 0.2) indicating that we think their answer will be at chance level.
+
+###6. Optional question: Can you estimate the difference between Riccardo's estimated knowledge and that of each of the other teachers? Would you deem it credible (that is, would you believe that it is actually different)?
+
+###7. Bonus knowledge: all the stuff we have done can be implemented in a lme4-like fashion using the brms package. Here is an example.
+```{r}
+library(brms)
+d <- data.frame(
+  Correct=c(3,2,160,66),
+  Questions=c(6,2,198,132),
+  Teacher=c("RF","KT","JS","MW"))
+
+FlatModel <- brm(Correct|trials(Questions)~1,data=subset(d,Teacher=="RF"),prior=prior("uniform(0,1)", class = "Intercept"))
+plot(FlatModel)
+PositiveModel <- brm(Correct|trials(Questions)~1,data=subset(d,Teacher=="RF"),prior=prior("normal(0.8,0.2)", class = "Intercept"))
+plot(PositiveModel)
+SkepticalModel <- brm(Correct|trials(Questions)~1,data=subset(d,Teacher=="RF"),prior=prior("normal(0.5,0.01)", class = "Intercept"))
+plot(SkepticalModel)
+```
+
+If you dare, try to tweak the data and model to test two hypotheses:
+- Is Kristian different from Josh?
+- Is Josh different from chance?
+
+
+
